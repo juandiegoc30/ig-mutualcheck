@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Instagram Followback Checker",
+  "version": "1.0.0",
+  "description": "Analiza tu cuenta de Instagram, filtra resultados y detecta cuentas que no te siguen de vuelta",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://www.instagram.com/*"
+  ],
+  "action": {
+    "default_title": "Instagram Followback Checker",
+    "default_icon": "assets/icon.png"
+  },
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.instagram.com/*"
+      ],
+      "js": [
+        "src/content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

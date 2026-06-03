@@ -1,0 +1,17 @@
+{
+  "name": "instagram-followback-checker",
+  "version": "1.4.1",
+  "description": "Chrome/Edge extension to check which Instagram accounts you follow do not follow you back.",
+  "private": true,
+  "scripts": {
+    "zip": "zip -r instagram-followback-extension-v14.zip . -x '*.git*'"
+  },
+  "keywords": [
+    "instagram",
+    "followback",
+    "chrome-extension",
+    "edge-extension"
+  ],
+  "author": "",
+  "license": "MIT"
+}
