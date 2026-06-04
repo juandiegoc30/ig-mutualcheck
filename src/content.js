@@ -148,6 +148,11 @@
 
   let currentLang = navigator.language && navigator.language.toLowerCase().startsWith('es') ? 'es' : 'en';
 
+  function getLangFlagUrl(lang) {
+    const code = lang === 'es' ? 'es' : 'us';
+    return chrome.runtime.getURL(`assets/flags/4x3/${code}.svg`);
+  }
+
   function tr(key, params = {}) {
     const source = I18N[currentLang] || I18N.es;
     let text = source[key] || I18N.es[key] || key;
@@ -247,8 +252,15 @@
     if (speedBalancedHint) speedBalancedHint.textContent = tr('balancedHint');
     if (speedFastHint) speedFastHint.textContent = tr('fastHint');
 
-    const lang = $('ifc-language');
-    if (lang) lang.value = currentLang;
+    const langButton = $('ifc-language');
+    const langFlag = $('ifc-language-flag');
+    const langCode = $('ifc-language-code');
+    if (langButton) {
+      langButton.title = tr('language');
+      langButton.setAttribute('aria-label', tr('language'));
+    }
+    if (langFlag) langFlag.src = getLangFlagUrl(currentLang);
+    if (langCode) langCode.textContent = currentLang.toUpperCase();
 
     if (!state.currentUser?.username) {
       const account = $('ifc-account');
@@ -490,15 +502,27 @@
         background: #ffffff !important;
         color: #111827 !important;
         border-radius: 999px;
-        padding: 6px 8px;
+        padding: 6px 12px;
         font-size: 13px;
+        font-weight: 800;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        height: 32px;
+        white-space: nowrap;
         cursor: pointer;
         outline: none;
       }
 
-      .ifc-language option {
-        color: #111827;
-        background: #ffffff;
+      .ifc-language-flag {
+        display: block;
+        width: 18px;
+        height: 13px;
+        line-height: 1;
+        border-radius: 2px;
+        border: 1px solid #e5e7eb;
+        object-fit: cover;
       }
 
       .ifc-close {
@@ -1010,10 +1034,10 @@
           <div class="ifc-subtitle" id="ifc-account" title="Cuenta: no detectada">Cuenta: no detectada</div>
         </div>
         <div class="ifc-header-right">
-          <select class="ifc-language" id="ifc-language" title="Idioma">
-            <option value="es">🇪🇸 ES</option>
-            <option value="en">🇺🇸 EN</option>
-          </select>
+          <button class="ifc-language" id="ifc-language" type="button" title="Idioma" aria-label="Idioma">
+            <img class="ifc-language-flag" id="ifc-language-flag" src="${getLangFlagUrl('es')}" alt="" aria-hidden="true" />
+            <span id="ifc-language-code">ES</span>
+          </button>
           <button class="ifc-close" id="ifc-close" title="Cerrar">×</button>
         </div>
       </div>
@@ -1502,8 +1526,8 @@
 
   function bindEvents(root) {
     root.querySelector('#ifc-close').addEventListener('click', () => root.remove());
-    root.querySelector('#ifc-language').addEventListener('change', async (event) => {
-      await saveLanguagePreference(event.currentTarget.value);
+    root.querySelector('#ifc-language').addEventListener('click', async () => {
+      await saveLanguagePreference(currentLang === 'es' ? 'en' : 'es');
       applyTranslations();
       updateMetrics();
     });
