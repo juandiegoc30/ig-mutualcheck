@@ -851,6 +851,7 @@
         background: transparent;
         color: #2563eb;
         cursor: pointer;
+        font-size: 12px;
         font-weight: 700;
         padding: 0;
       }
@@ -911,9 +912,36 @@
       .ifc-user-wrap {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
         min-width: 0;
         flex: 1 1 auto;
+      }
+
+      .ifc-avatar,
+      .ifc-avatar-fallback {
+        width: 34px;
+        height: 34px;
+        border-radius: 999px;
+        flex: 0 0 auto;
+      }
+
+      .ifc-avatar {
+        display: block;
+        object-fit: cover;
+        background: #f3f4f6;
+        border: 1px solid #e5e7eb;
+      }
+
+      .ifc-avatar-fallback {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #dbeafe;
+        background: linear-gradient(135deg, #e0f2fe, #eff6ff);
+        color: #1e3a8a;
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
       }
 
       .ifc-username {
@@ -965,11 +993,29 @@
       }
 
       .ifc-open {
+        appearance: none;
+        border: 0;
+        background: transparent;
         color: #2563eb;
         text-decoration: none;
         font-size: 12px;
         font-weight: 700;
+        line-height: 1;
+        padding: 0;
+        cursor: pointer;
         flex: 0 0 auto;
+      }
+
+      .ifc-open:hover,
+      .ifc-open:active,
+      .ifc-open:focus,
+      .ifc-open:focus-visible {
+        color: #2563eb;
+        text-decoration: none;
+      }
+
+      .ifc-open:hover {
+        color: #1d4ed8;
       }
 
       @media (max-width: 560px) {
@@ -1291,11 +1337,16 @@
     list.innerHTML = results.map((user) => {
       const username = normalizeUsername(user.username);
       const checked = state.selectedToUnfollow.has(username) ? 'checked' : '';
+      const avatarInitial = escapeHtml((user.username || '?').slice(0, 1).toUpperCase());
+      const avatarMarkup = user.profilePicUrl
+        ? `<img class="ifc-avatar" src="${escapeHtml(user.profilePicUrl)}" alt="@${escapeHtml(user.username)}" loading="lazy" decoding="async" data-fallback="${avatarInitial}" />`
+        : `<span class="ifc-avatar-fallback" aria-hidden="true">${avatarInitial}</span>`;
 
       return `
         <div class="ifc-row" data-username="${escapeHtml(user.username)}">
           <div class="ifc-user-wrap">
             <input class="ifc-checkbox ifc-user-checkbox" type="checkbox" data-username="${escapeHtml(user.username)}" ${checked} title="${escapeHtml(tr('includeUnfollow'))}" />
+            ${avatarMarkup}
             <div class="ifc-user">
               <div class="ifc-username">
                 <span>@${escapeHtml(user.username)}</span>
@@ -1304,7 +1355,7 @@
               <div class="ifc-fullname">${escapeHtml(user.fullName || (user.isPrivate ? tr('privateAccount') : ''))}</div>
             </div>
           </div>
-          <a class="ifc-open" href="${user.profileUrl}" target="_blank" rel="noreferrer">${escapeHtml(tr('open'))}</a>
+          <button class="ifc-open" type="button" data-profile-url="${escapeHtml(user.profileUrl)}">${escapeHtml(tr('open'))}</button>
         </div>
       `;
     }).join('');
@@ -1318,6 +1369,23 @@
         else state.selectedToUnfollow.delete(username);
 
         refreshActionButtons();
+      });
+    });
+
+    list.querySelectorAll('.ifc-avatar').forEach((img) => {
+      img.addEventListener('error', () => {
+        const fallback = document.createElement('span');
+        fallback.className = 'ifc-avatar-fallback';
+        fallback.setAttribute('aria-hidden', 'true');
+        fallback.textContent = img.dataset.fallback || '?';
+        img.replaceWith(fallback);
+      }, { once: true });
+    });
+
+    list.querySelectorAll('.ifc-open').forEach((button) => {
+      button.addEventListener('click', () => {
+        const profileUrl = button.dataset.profileUrl;
+        if (profileUrl) window.open(profileUrl, '_blank', 'noreferrer');
       });
     });
 
