@@ -72,6 +72,13 @@
       readingFollowingProgress: 'Leyendo seguidos... {count} encontrados.',
       analysisDone: 'Análisis terminado. {count} cuentas no te siguen de vuelta.',
       analysisError: 'No se pudo completar el análisis. Verifica que tengas sesión iniciada en Instagram o intenta más tarde.',
+      apiUnauthorized: 'La sesión de Instagram expiró o no es válida. Recarga Instagram e inicia sesión nuevamente.',
+      apiForbidden: 'Instagram bloqueó temporalmente esta solicitud. Espera unos minutos antes de intentarlo otra vez.',
+      apiRateLimited: 'Instagram alcanzó el límite de solicitudes. Espera unos minutos antes de volver a intentarlo.',
+      apiServerError: 'Instagram no está disponible temporalmente (error {status}). Intenta más tarde.',
+      apiRequestError: 'Instagram rechazó la solicitud (error {status}).',
+      apiInvalidResponse: 'Instagram devolvió una respuesta inválida. Recarga la página e intenta nuevamente.',
+      csrfMissing: 'No se encontró el token de seguridad de Instagram. Recarga la página antes de dejar de seguir cuentas.',
       canceling: 'Cancelando proceso...',
       language: 'Idioma'
     },
@@ -141,6 +148,13 @@
       readingFollowingProgress: 'Reading following... {count} found.',
       analysisDone: 'Analysis complete. {count} accounts do not follow you back.',
       analysisError: 'Could not complete the analysis. Check that you are logged in to Instagram or try again later.',
+      apiUnauthorized: 'Your Instagram session expired or is invalid. Reload Instagram and sign in again.',
+      apiForbidden: 'Instagram temporarily blocked this request. Wait a few minutes before trying again.',
+      apiRateLimited: 'Instagram reached its request limit. Wait a few minutes before trying again.',
+      apiServerError: 'Instagram is temporarily unavailable (error {status}). Try again later.',
+      apiRequestError: 'Instagram rejected the request (error {status}).',
+      apiInvalidResponse: 'Instagram returned an invalid response. Reload the page and try again.',
+      csrfMissing: 'Instagram’s security token was not found. Reload the page before unfollowing accounts.',
       canceling: 'Canceling process...',
       language: 'Language'
     }
@@ -306,8 +320,22 @@
     return '';
   }
 
+  function getApiErrorMessage(status) {
+    if (status === 401) return tr('apiUnauthorized');
+    if (status === 403) return tr('apiForbidden');
+    if (status === 429) return tr('apiRateLimited');
+    if (status >= 500) return tr('apiServerError', { status });
+    return tr('apiRequestError', { status });
+  }
+
   async function igFetch(url, options = {}) {
     const method = options.method || 'GET';
+    const csrfToken = method !== 'GET' ? getCookie('csrftoken') : '';
+
+    if (method !== 'GET' && !csrfToken) {
+      throw new Error(tr('csrfMissing'));
+    }
+
     const response = await fetch(url, {
       method,
       credentials: 'include',
@@ -315,18 +343,28 @@
         'x-ig-app-id': IG_APP_ID,
         'x-requested-with': 'XMLHttpRequest',
         'accept': 'application/json',
-        ...(method !== 'GET' ? { 'x-csrftoken': getCookie('csrftoken') } : {}),
+        ...(method !== 'GET' ? { 'x-csrftoken': csrfToken } : {}),
         ...(options.headers || {})
       },
       body: options.body
     });
 
     if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      throw new Error(`Instagram respondió ${response.status}. ${body.slice(0, 300)}`);
+      throw new Error(getApiErrorMessage(response.status));
     }
 
-    return response.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch (_) {
+      throw new Error(tr('apiInvalidResponse'));
+    }
+
+    if (data?.status === 'fail') {
+      throw new Error(data.message || tr('apiRequestError', { status: response.status }));
+    }
+
+    return data;
   }
 
   async function getCurrentUserFromEditData() {
