@@ -4,6 +4,13 @@
 
   const IG_APP_ID = '936619743392459';
   const API_BASE = 'https://www.instagram.com/api/v1';
+  const {
+    normalizeUsername,
+    compareLists,
+    filterResults,
+    updateVisibleSelection,
+    toCsv
+  } = globalThis.IFCCore;
 
   const I18N = {
     es: {
@@ -72,6 +79,13 @@
       readingFollowingProgress: 'Leyendo seguidos... {count} encontrados.',
       analysisDone: 'Análisis terminado. {count} cuentas no te siguen de vuelta.',
       analysisError: 'No se pudo completar el análisis. Verifica que tengas sesión iniciada en Instagram o intenta más tarde.',
+      apiUnauthorized: 'La sesión de Instagram expiró o no es válida. Recarga Instagram e inicia sesión nuevamente.',
+      apiForbidden: 'Instagram bloqueó temporalmente esta solicitud. Espera unos minutos antes de intentarlo otra vez.',
+      apiRateLimited: 'Instagram alcanzó el límite de solicitudes. Espera unos minutos antes de volver a intentarlo.',
+      apiServerError: 'Instagram no está disponible temporalmente (error {status}). Intenta más tarde.',
+      apiRequestError: 'Instagram rechazó la solicitud (error {status}).',
+      apiInvalidResponse: 'Instagram devolvió una respuesta inválida. Recarga la página e intenta nuevamente.',
+      csrfMissing: 'No se encontró el token de seguridad de Instagram. Recarga la página antes de dejar de seguir cuentas.',
       canceling: 'Cancelando proceso...',
       language: 'Idioma'
     },
@@ -141,6 +155,13 @@
       readingFollowingProgress: 'Reading following... {count} found.',
       analysisDone: 'Analysis complete. {count} accounts do not follow you back.',
       analysisError: 'Could not complete the analysis. Check that you are logged in to Instagram or try again later.',
+      apiUnauthorized: 'Your Instagram session expired or is invalid. Reload Instagram and sign in again.',
+      apiForbidden: 'Instagram temporarily blocked this request. Wait a few minutes before trying again.',
+      apiRateLimited: 'Instagram reached its request limit. Wait a few minutes before trying again.',
+      apiServerError: 'Instagram is temporarily unavailable (error {status}). Try again later.',
+      apiRequestError: 'Instagram rejected the request (error {status}).',
+      apiInvalidResponse: 'Instagram returned an invalid response. Reload the page and try again.',
+      csrfMissing: 'Instagram’s security token was not found. Reload the page before unfollowing accounts.',
       canceling: 'Canceling process...',
       language: 'Language'
     }
@@ -295,10 +316,6 @@
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  function normalizeUsername(username) {
-    return String(username || '').trim().replace(/^@/, '').toLowerCase();
-  }
-
   function getCookie(name) {
     const value = `; ${document.cookie}`;
     const parts = value.split(`; ${name}=`);
@@ -306,8 +323,22 @@
     return '';
   }
 
+  function getApiErrorMessage(status) {
+    if (status === 401) return tr('apiUnauthorized');
+    if (status === 403) return tr('apiForbidden');
+    if (status === 429) return tr('apiRateLimited');
+    if (status >= 500) return tr('apiServerError', { status });
+    return tr('apiRequestError', { status });
+  }
+
   async function igFetch(url, options = {}) {
     const method = options.method || 'GET';
+    const csrfToken = method !== 'GET' ? getCookie('csrftoken') : '';
+
+    if (method !== 'GET' && !csrfToken) {
+      throw new Error(tr('csrfMissing'));
+    }
+
     const response = await fetch(url, {
       method,
       credentials: 'include',
@@ -315,18 +346,28 @@
         'x-ig-app-id': IG_APP_ID,
         'x-requested-with': 'XMLHttpRequest',
         'accept': 'application/json',
-        ...(method !== 'GET' ? { 'x-csrftoken': getCookie('csrftoken') } : {}),
+        ...(method !== 'GET' ? { 'x-csrftoken': csrfToken } : {}),
         ...(options.headers || {})
       },
       body: options.body
     });
 
     if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      throw new Error(`Instagram respondió ${response.status}. ${body.slice(0, 300)}`);
+      throw new Error(getApiErrorMessage(response.status));
     }
 
-    return response.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch (_) {
+      throw new Error(tr('apiInvalidResponse'));
+    }
+
+    if (data?.status === 'fail') {
+      throw new Error(data.message || tr('apiRequestError', { status: response.status }));
+    }
+
+    return data;
   }
 
   async function getCurrentUserFromEditData() {
@@ -406,11 +447,6 @@
     }
 
     return users;
-  }
-
-  function compareLists(followers, following) {
-    const followersSet = new Set(followers.map((user) => normalizeUsername(user.username)));
-    return following.filter((user) => !followersSet.has(normalizeUsername(user.username)));
   }
 
   async function unfollowUser(user) {
@@ -983,6 +1019,23 @@
         fill: #ffffff;
       }
 
+      .ifc-private-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 16px;
+        height: 16px;
+        flex: 0 0 auto;
+        color: #6b7280;
+        transform: translateY(1px);
+      }
+
+      .ifc-private-badge svg {
+        width: 14px;
+        height: 14px;
+        display: block;
+      }
+
       .ifc-fullname {
         color: #6b7280;
         font-size: 12px;
@@ -1225,6 +1278,10 @@
     const count = $('ifc-selected-count');
     const total = state.notFollowingBack.length;
     const selected = getSelectedUsers().length;
+    const visibleResults = getFilteredResults();
+    const visibleSelected = visibleResults.filter((user) => (
+      state.selectedToUnfollow.has(normalizeUsername(user.username))
+    )).length;
 
     if (panel) panel.style.display = total ? 'grid' : 'none';
     if (count) count.textContent = tr('selectedOfTotal', { selected, total });
@@ -1232,8 +1289,8 @@
     if (smallCount) smallCount.textContent = tr('selected', { selected });
 
     if (selectAll) {
-      selectAll.checked = total > 0 && selected === total;
-      selectAll.indeterminate = selected > 0 && selected < total;
+      selectAll.checked = visibleResults.length > 0 && visibleSelected === visibleResults.length;
+      selectAll.indeterminate = visibleSelected > 0 && visibleSelected < visibleResults.length;
     }
   }
 
@@ -1280,31 +1337,10 @@
   }
 
   function getFilteredResults() {
-    const rawFilter = String($('ifc-filter')?.value || '').trim().toLowerCase();
-    const filter = normalizeUsername(rawFilter);
-    const mode = $('ifc-filter-mode')?.value || 'contains';
-    const accountType = $('ifc-account-type')?.value || 'all';
-
-    return state.notFollowingBack.filter((user) => {
-      const username = normalizeUsername(user.username);
-      const fullName = String(user.fullName || '').toLowerCase();
-
-      if (accountType === 'verified' && !user.isVerified) return false;
-      if (accountType === 'not_verified' && user.isVerified) return false;
-      if (accountType === 'private' && !user.isPrivate) return false;
-      if (accountType === 'public' && user.isPrivate) return false;
-
-      if (!filter && !rawFilter) return true;
-
-      if (mode === 'starts') {
-        return username.startsWith(filter) || fullName.startsWith(rawFilter);
-      }
-
-      if (mode === 'exact') {
-        return username === filter || fullName === rawFilter;
-      }
-
-      return username.includes(filter) || fullName.includes(rawFilter);
+    return filterResults(state.notFollowingBack, {
+      query: $('ifc-filter')?.value || '',
+      mode: $('ifc-filter-mode')?.value || 'contains',
+      accountType: $('ifc-account-type')?.value || 'all'
     });
   }
 
@@ -1314,6 +1350,18 @@
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <path class="ifc-verified-star" d="M12 1.7l2.15 2.03 2.96-.39 1.1 2.77 2.73 1.23-.76 2.89L22 12.6l-1.82 2.37.76 2.89-2.73 1.23-1.1 2.77-2.96-.39L12 23.5l-2.15-2.03-2.96.39-1.1-2.77-2.73-1.23.76-2.89L2 12.6l1.82-2.37-.76-2.89 2.73-1.23 1.1-2.77 2.96.39L12 1.7z"/>
           <path class="ifc-verified-check" d="M10.35 15.35l-3-3 1.35-1.35 1.65 1.65 4.95-4.95 1.35 1.35-6.3 6.3z"/>
+        </svg>
+      </span>
+    `;
+  }
+
+  function getPrivateBadgeMarkup() {
+    const label = escapeHtml(tr('privateAccount'));
+    return `
+      <span class="ifc-private-badge" title="${label}" aria-label="${label}">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <rect x="5" y="10" width="14" height="11" rx="2" fill="currentColor"></rect>
+          <path d="M8 10V7a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"></path>
         </svg>
       </span>
     `;
@@ -1351,6 +1399,7 @@
               <div class="ifc-username">
                 <span>@${escapeHtml(user.username)}</span>
                 ${user.isVerified ? getVerifiedBadgeMarkup() : ''}
+                ${user.isPrivate ? getPrivateBadgeMarkup() : ''}
               </div>
               <div class="ifc-fullname">${escapeHtml(user.fullName || (user.isPrivate ? tr('privateAccount') : ''))}</div>
             </div>
@@ -1413,25 +1462,18 @@
     URL.revokeObjectURL(url);
   }
 
-  function toCsv(rows) {
-    const header = ['username', 'user_id', 'full_name', 'profile_url', 'is_private', 'is_verified'];
-    const escapeCsv = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
-    const body = rows.map((user) => [
-      user.username,
-      user.userId,
-      user.fullName,
-      user.profileUrl,
-      user.isPrivate,
-      user.isVerified
-    ].map(escapeCsv).join(','));
-
-    return [header.join(','), ...body].join('\n');
-  }
-
   async function copyResults() {
-    const text = state.notFollowingBack.map((user) => `@${user.username}`).join('\n');
+    const text = getFilteredResults().map((user) => `@${user.username}`).join('\n');
     await navigator.clipboard.writeText(text);
     setStatus(tr('copied'));
+  }
+
+  function closeExportMenuOnOutsideClick(event) {
+    const menu = $('ifc-export-menu');
+    const button = $('ifc-export');
+    if (!menu || menu.hidden) return;
+    if (menu.contains(event.target) || button?.contains(event.target)) return;
+    menu.hidden = true;
   }
 
   function getUnfollowDelay() {
@@ -1615,11 +1657,11 @@
       renderList();
     });
     root.querySelector('#ifc-select-all').addEventListener('change', (event) => {
-      if (event.currentTarget.checked) {
-        state.selectedToUnfollow = new Set(state.notFollowingBack.map((user) => normalizeUsername(user.username)));
-      } else {
-        state.selectedToUnfollow.clear();
-      }
+      state.selectedToUnfollow = updateVisibleSelection(
+        state.selectedToUnfollow,
+        getFilteredResults(),
+        event.currentTarget.checked
+      );
       renderList();
       refreshActionButtons();
     });
@@ -1633,25 +1675,19 @@
     root.querySelector('#ifc-export-csv').addEventListener('click', () => {
       const menu = $('ifc-export-menu');
       if (menu) menu.hidden = true;
-      downloadFile('instagram-no-followback.csv', toCsv(state.notFollowingBack), 'text/csv;charset=utf-8');
+      downloadFile('instagram-no-followback.csv', toCsv(getFilteredResults()), 'text/csv;charset=utf-8');
     });
     root.querySelector('#ifc-export-json').addEventListener('click', () => {
       const menu = $('ifc-export-menu');
       if (menu) menu.hidden = true;
+      const filteredResults = getFilteredResults();
       downloadFile('instagram-no-followback.json', JSON.stringify({
         account: state.currentUser,
-        notFollowingBack: state.notFollowingBack,
+        notFollowingBack: filteredResults,
         followersCount: state.followers.length,
         followingCount: state.following.length,
         generatedAt: new Date().toISOString()
       }, null, 2), 'application/json;charset=utf-8');
-    });
-    document.addEventListener('click', (event) => {
-      const menu = $('ifc-export-menu');
-      const button = $('ifc-export');
-      if (!menu || menu.hidden) return;
-      if (menu.contains(event.target) || button?.contains(event.target)) return;
-      menu.hidden = true;
     });
   }
 
@@ -1672,4 +1708,6 @@
       togglePanel();
     }
   });
+
+  document.addEventListener('click', closeExportMenuOnOutsideClick);
 })();
