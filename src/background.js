@@ -1,5 +1,14 @@
+function isInstagramUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && url.hostname === 'www.instagram.com';
+  } catch (_) {
+    return false;
+  }
+}
+
 chrome.action.onClicked.addListener(async (tab) => {
-  if (!tab.id || !tab.url || !tab.url.includes('instagram.com')) {
+  if (!tab.id || !isInstagramUrl(tab.url)) {
     return;
   }
 
