@@ -983,6 +983,23 @@
         fill: #ffffff;
       }
 
+      .ifc-private-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 16px;
+        height: 16px;
+        flex: 0 0 auto;
+        color: #6b7280;
+        transform: translateY(1px);
+      }
+
+      .ifc-private-badge svg {
+        width: 14px;
+        height: 14px;
+        display: block;
+      }
+
       .ifc-fullname {
         color: #6b7280;
         font-size: 12px;
@@ -1323,6 +1340,18 @@
     `;
   }
 
+  function getPrivateBadgeMarkup() {
+    const label = escapeHtml(tr('privateAccount'));
+    return `
+      <span class="ifc-private-badge" title="${label}" aria-label="${label}">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <rect x="5" y="10" width="14" height="11" rx="2" fill="currentColor"></rect>
+          <path d="M8 10V7a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"></path>
+        </svg>
+      </span>
+    `;
+  }
+
   function renderList() {
     const list = $('ifc-list');
     const results = getFilteredResults();
@@ -1355,6 +1384,7 @@
               <div class="ifc-username">
                 <span>@${escapeHtml(user.username)}</span>
                 ${user.isVerified ? getVerifiedBadgeMarkup() : ''}
+                ${user.isPrivate ? getPrivateBadgeMarkup() : ''}
               </div>
               <div class="ifc-fullname">${escapeHtml(user.fullName || (user.isPrivate ? tr('privateAccount') : ''))}</div>
             </div>
