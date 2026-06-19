@@ -1225,6 +1225,10 @@
     const count = $('ifc-selected-count');
     const total = state.notFollowingBack.length;
     const selected = getSelectedUsers().length;
+    const visibleResults = getFilteredResults();
+    const visibleSelected = visibleResults.filter((user) => (
+      state.selectedToUnfollow.has(normalizeUsername(user.username))
+    )).length;
 
     if (panel) panel.style.display = total ? 'grid' : 'none';
     if (count) count.textContent = tr('selectedOfTotal', { selected, total });
@@ -1232,8 +1236,8 @@
     if (smallCount) smallCount.textContent = tr('selected', { selected });
 
     if (selectAll) {
-      selectAll.checked = total > 0 && selected === total;
-      selectAll.indeterminate = selected > 0 && selected < total;
+      selectAll.checked = visibleResults.length > 0 && visibleSelected === visibleResults.length;
+      selectAll.indeterminate = visibleSelected > 0 && visibleSelected < visibleResults.length;
     }
   }
 
@@ -1429,7 +1433,7 @@
   }
 
   async function copyResults() {
-    const text = state.notFollowingBack.map((user) => `@${user.username}`).join('\n');
+    const text = getFilteredResults().map((user) => `@${user.username}`).join('\n');
     await navigator.clipboard.writeText(text);
     setStatus(tr('copied'));
   }
@@ -1615,10 +1619,12 @@
       renderList();
     });
     root.querySelector('#ifc-select-all').addEventListener('change', (event) => {
+      const visibleUsernames = getFilteredResults().map((user) => normalizeUsername(user.username));
+
       if (event.currentTarget.checked) {
-        state.selectedToUnfollow = new Set(state.notFollowingBack.map((user) => normalizeUsername(user.username)));
+        for (const username of visibleUsernames) state.selectedToUnfollow.add(username);
       } else {
-        state.selectedToUnfollow.clear();
+        for (const username of visibleUsernames) state.selectedToUnfollow.delete(username);
       }
       renderList();
       refreshActionButtons();
@@ -1633,14 +1639,15 @@
     root.querySelector('#ifc-export-csv').addEventListener('click', () => {
       const menu = $('ifc-export-menu');
       if (menu) menu.hidden = true;
-      downloadFile('instagram-no-followback.csv', toCsv(state.notFollowingBack), 'text/csv;charset=utf-8');
+      downloadFile('instagram-no-followback.csv', toCsv(getFilteredResults()), 'text/csv;charset=utf-8');
     });
     root.querySelector('#ifc-export-json').addEventListener('click', () => {
       const menu = $('ifc-export-menu');
       if (menu) menu.hidden = true;
+      const filteredResults = getFilteredResults();
       downloadFile('instagram-no-followback.json', JSON.stringify({
         account: state.currentUser,
-        notFollowingBack: state.notFollowingBack,
+        notFollowingBack: filteredResults,
         followersCount: state.followers.length,
         followingCount: state.following.length,
         generatedAt: new Date().toISOString()
