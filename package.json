@@ -4,6 +4,9 @@
   "description": "Chrome/Edge extension to check which Instagram accounts you follow do not follow you back.",
   "private": true,
   "scripts": {
+    "lint": "node scripts/check-syntax.js",
+    "test": "node --test",
+    "check": "npm run lint && npm test && npm run package",
     "package": "node scripts/package-extension.js",
     "zip": "npm run package"
   },

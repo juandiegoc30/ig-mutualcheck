@@ -24,6 +24,7 @@
         "https://www.instagram.com/*"
       ],
       "js": [
+        "src/core.js",
         "src/content.js"
       ],
       "run_at": "document_idle"

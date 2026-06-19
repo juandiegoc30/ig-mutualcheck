@@ -4,6 +4,13 @@
 
   const IG_APP_ID = '936619743392459';
   const API_BASE = 'https://www.instagram.com/api/v1';
+  const {
+    normalizeUsername,
+    compareLists,
+    filterResults,
+    updateVisibleSelection,
+    toCsv
+  } = globalThis.IFCCore;
 
   const I18N = {
     es: {
@@ -309,10 +316,6 @@
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  function normalizeUsername(username) {
-    return String(username || '').trim().replace(/^@/, '').toLowerCase();
-  }
-
   function getCookie(name) {
     const value = `; ${document.cookie}`;
     const parts = value.split(`; ${name}=`);
@@ -444,11 +447,6 @@
     }
 
     return users;
-  }
-
-  function compareLists(followers, following) {
-    const followersSet = new Set(followers.map((user) => normalizeUsername(user.username)));
-    return following.filter((user) => !followersSet.has(normalizeUsername(user.username)));
   }
 
   async function unfollowUser(user) {
@@ -1339,31 +1337,10 @@
   }
 
   function getFilteredResults() {
-    const rawFilter = String($('ifc-filter')?.value || '').trim().toLowerCase();
-    const filter = normalizeUsername(rawFilter);
-    const mode = $('ifc-filter-mode')?.value || 'contains';
-    const accountType = $('ifc-account-type')?.value || 'all';
-
-    return state.notFollowingBack.filter((user) => {
-      const username = normalizeUsername(user.username);
-      const fullName = String(user.fullName || '').toLowerCase();
-
-      if (accountType === 'verified' && !user.isVerified) return false;
-      if (accountType === 'not_verified' && user.isVerified) return false;
-      if (accountType === 'private' && !user.isPrivate) return false;
-      if (accountType === 'public' && user.isPrivate) return false;
-
-      if (!filter && !rawFilter) return true;
-
-      if (mode === 'starts') {
-        return username.startsWith(filter) || fullName.startsWith(rawFilter);
-      }
-
-      if (mode === 'exact') {
-        return username === filter || fullName === rawFilter;
-      }
-
-      return username.includes(filter) || fullName.includes(rawFilter);
+    return filterResults(state.notFollowingBack, {
+      query: $('ifc-filter')?.value || '',
+      mode: $('ifc-filter-mode')?.value || 'contains',
+      accountType: $('ifc-account-type')?.value || 'all'
     });
   }
 
@@ -1483,21 +1460,6 @@
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-  }
-
-  function toCsv(rows) {
-    const header = ['username', 'user_id', 'full_name', 'profile_url', 'is_private', 'is_verified'];
-    const escapeCsv = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
-    const body = rows.map((user) => [
-      user.username,
-      user.userId,
-      user.fullName,
-      user.profileUrl,
-      user.isPrivate,
-      user.isVerified
-    ].map(escapeCsv).join(','));
-
-    return [header.join(','), ...body].join('\n');
   }
 
   async function copyResults() {
@@ -1695,13 +1657,11 @@
       renderList();
     });
     root.querySelector('#ifc-select-all').addEventListener('change', (event) => {
-      const visibleUsernames = getFilteredResults().map((user) => normalizeUsername(user.username));
-
-      if (event.currentTarget.checked) {
-        for (const username of visibleUsernames) state.selectedToUnfollow.add(username);
-      } else {
-        for (const username of visibleUsernames) state.selectedToUnfollow.delete(username);
-      }
+      state.selectedToUnfollow = updateVisibleSelection(
+        state.selectedToUnfollow,
+        getFilteredResults(),
+        event.currentTarget.checked
+      );
       renderList();
       refreshActionButtons();
     });
