@@ -1438,6 +1438,14 @@
     setStatus(tr('copied'));
   }
 
+  function closeExportMenuOnOutsideClick(event) {
+    const menu = $('ifc-export-menu');
+    const button = $('ifc-export');
+    if (!menu || menu.hidden) return;
+    if (menu.contains(event.target) || button?.contains(event.target)) return;
+    menu.hidden = true;
+  }
+
   function getUnfollowDelay() {
     const speed = document.querySelector('input[name="ifc-speed"]:checked')?.value || 'balanced';
 
@@ -1653,13 +1661,6 @@
         generatedAt: new Date().toISOString()
       }, null, 2), 'application/json;charset=utf-8');
     });
-    document.addEventListener('click', (event) => {
-      const menu = $('ifc-export-menu');
-      const button = $('ifc-export');
-      if (!menu || menu.hidden) return;
-      if (menu.contains(event.target) || button?.contains(event.target)) return;
-      menu.hidden = true;
-    });
   }
 
   async function togglePanel() {
@@ -1679,4 +1680,6 @@
       togglePanel();
     }
   });
+
+  document.addEventListener('click', closeExportMenuOnOutsideClick);
 })();
