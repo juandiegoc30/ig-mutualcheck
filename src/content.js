@@ -309,11 +309,37 @@
     notFollowingBack: [],
     unfollowRunning: false,
     unfollowCancel: false,
-    selectedToUnfollow: new Set()
+    selectedToUnfollow: new Set(),
+    abortController: null
   };
 
-  function sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  function createAbortError() {
+    return new DOMException(tr('canceledByUser'), 'AbortError');
+  }
+
+  function isAbortError(error) {
+    return error?.name === 'AbortError';
+  }
+
+  function sleep(ms, signal) {
+    return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(createAbortError());
+        return;
+      }
+
+      const timeoutId = setTimeout(() => {
+        signal?.removeEventListener('abort', handleAbort);
+        resolve();
+      }, ms);
+
+      function handleAbort() {
+        clearTimeout(timeoutId);
+        reject(createAbortError());
+      }
+
+      signal?.addEventListener('abort', handleAbort, { once: true });
+    });
   }
 
   function getCookie(name) {
@@ -349,7 +375,8 @@
         ...(method !== 'GET' ? { 'x-csrftoken': csrfToken } : {}),
         ...(options.headers || {})
       },
-      body: options.body
+      body: options.body,
+      signal: options.signal
     });
 
     if (!response.ok) {
@@ -370,8 +397,8 @@
     return data;
   }
 
-  async function getCurrentUserFromEditData() {
-    const data = await igFetch(`${API_BASE}/accounts/edit/web_form_data/`);
+  async function getCurrentUserFromEditData(signal) {
+    const data = await igFetch(`${API_BASE}/accounts/edit/web_form_data/`, { signal });
     const formData = data?.form_data || {};
     const username = normalizeUsername(formData.username);
     const userId = formData.user_id || formData.username_id || formData.pk || formData.id;
@@ -383,9 +410,12 @@
     return { username, userId: userId ? String(userId) : null };
   }
 
-  async function getUserIdByUsername(username) {
+  async function getUserIdByUsername(username, signal) {
     const cleanUsername = normalizeUsername(username);
-    const data = await igFetch(`${API_BASE}/users/web_profile_info/?username=${encodeURIComponent(cleanUsername)}`);
+    const data = await igFetch(
+      `${API_BASE}/users/web_profile_info/?username=${encodeURIComponent(cleanUsername)}`,
+      { signal }
+    );
     const userId = data?.data?.user?.id;
 
     if (!userId) {
@@ -395,18 +425,18 @@
     return String(userId);
   }
 
-  async function getCurrentUser() {
-    const user = await getCurrentUserFromEditData();
+  async function getCurrentUser(signal) {
+    const user = await getCurrentUserFromEditData(signal);
 
     if (user.userId) {
       return user;
     }
 
-    const userId = await getUserIdByUsername(user.username);
+    const userId = await getUserIdByUsername(user.username, signal);
     return { ...user, userId };
   }
 
-  async function getRelationshipList(userId, type, onProgress) {
+  async function getRelationshipList(userId, type, onProgress, signal) {
     const users = [];
     const seen = new Set();
     let maxId = '';
@@ -414,11 +444,11 @@
 
     while (true) {
       if (state.shouldCancel) {
-        throw new Error(tr('canceledByUser'));
+        throw createAbortError();
       }
 
       const url = `${API_BASE}/friendships/${userId}/${type}/?count=50${maxId ? `&max_id=${encodeURIComponent(maxId)}` : ''}`;
-      const data = await igFetch(url);
+      const data = await igFetch(url, { signal });
       const pageUsers = Array.isArray(data.users) ? data.users : [];
 
       for (const user of pageUsers) {
@@ -443,19 +473,20 @@
       maxId = data.next_max_id;
       page += 1;
 
-      await sleep(1100);
+      await sleep(1100, signal);
     }
 
     return users;
   }
 
-  async function unfollowUser(user) {
+  async function unfollowUser(user, signal) {
     if (!user.userId) {
-      user.userId = await getUserIdByUsername(user.username);
+      user.userId = await getUserIdByUsername(user.username, signal);
     }
 
     return igFetch(`${API_BASE}/friendships/destroy/${encodeURIComponent(user.userId)}/`, {
-      method: 'POST'
+      method: 'POST',
+      signal
     });
   }
 
@@ -1516,9 +1547,13 @@
     setError('');
     setUnfollowRunning(true);
     state.unfollowCancel = false;
+    const controller = new AbortController();
+    state.abortController = controller;
 
     const succeeded = [];
     const failed = [];
+    let canceled = false;
+    let fatalError = null;
 
     try {
       for (let i = 0; i < usersToUnfollow.length; i += 1) {
@@ -1531,9 +1566,10 @@
         setStatus(tr('unfollowingUser', { username: user.username, current: i + 1, total }));
 
         try {
-          await unfollowUser(user);
+          await unfollowUser(user, controller.signal);
           succeeded.push(user.username);
         } catch (error) {
+          if (isAbortError(error)) throw error;
           failed.push({ username: user.username, error: error.message || String(error) });
         }
 
@@ -1542,10 +1578,15 @@
         if (i < usersToUnfollow.length - 1 && !(state.unfollowCancel || state.shouldCancel)) {
           const delay = getUnfollowDelay();
           setStatus(tr('pauseBeforeNext', { seconds: (delay / 1000).toFixed(1), current: i + 1, total }));
-          await sleep(delay);
+          await sleep(delay, controller.signal);
         }
       }
+    } catch (error) {
+      if (isAbortError(error)) canceled = true;
+      else fatalError = error;
+    }
 
+    try {
       if (succeeded.length) {
         const succeededSet = new Set(succeeded.map(normalizeUsername));
         state.following = state.following.filter((user) => !succeededSet.has(normalizeUsername(user.username)));
@@ -1560,15 +1601,22 @@
       window.igMutualCheckUnfollowResult = {
         succeeded,
         failed,
+        canceled,
         generatedAt: new Date().toISOString()
       };
 
-      setStatus(tr('unfollowDone', { success: succeeded.length, failed: failed.length }));
-
-      if (failed.length) {
-        setError(tr('unfollowFailed'));
+      if (fatalError) {
+        setError(fatalError.message || String(fatalError));
+        setStatus(tr('analysisError'));
+      } else if (canceled) {
+        setStatus(tr('unfollowCanceled'));
+      } else {
+        setStatus(tr('unfollowDone', { success: succeeded.length, failed: failed.length }));
       }
+
+      if (failed.length) setError(tr('unfollowFailed'));
     } finally {
+      if (state.abortController === controller) state.abortController = null;
       state.unfollowCancel = false;
       state.shouldCancel = false;
       setUnfollowRunning(false);
@@ -1588,26 +1636,28 @@
     state.selectedToUnfollow.clear();
     updateMetrics();
     renderList();
+    const controller = new AbortController();
+    state.abortController = controller;
 
     try {
       setStatus(tr('detecting'));
-      state.currentUser = await getCurrentUser();
+      state.currentUser = await getCurrentUser(controller.signal);
       updateMetrics();
 
       setStatus(tr('readingFollowers', { username: state.currentUser.username }));
       state.followers = await getRelationshipList(state.currentUser.userId, 'followers', ({ count }) => {
         setStatus(tr('readingFollowersProgress', { count }));
         updateMetrics();
-      });
+      }, controller.signal);
       updateMetrics();
 
-      await sleep(1200);
+      await sleep(1200, controller.signal);
 
       setStatus(tr('readingFollowing', { username: state.currentUser.username }));
       state.following = await getRelationshipList(state.currentUser.userId, 'following', ({ count }) => {
         setStatus(tr('readingFollowingProgress', { count }));
         updateMetrics();
-      });
+      }, controller.signal);
       updateMetrics();
 
       state.notFollowingBack = compareLists(state.followers, state.following);
@@ -1627,9 +1677,15 @@
         generatedAt: new Date().toISOString()
       };
     } catch (error) {
-      setError(error.message || String(error));
-      setStatus(tr('analysisError'));
+      if (isAbortError(error)) {
+        setStatus(tr('canceledByUser'));
+      } else {
+        setError(error.message || String(error));
+        setStatus(tr('analysisError'));
+      }
     } finally {
+      if (state.abortController === controller) state.abortController = null;
+      state.shouldCancel = false;
       setRunning(false);
     }
   }
@@ -1645,6 +1701,7 @@
     root.querySelector('#ifc-cancel').addEventListener('click', () => {
       state.shouldCancel = true;
       state.unfollowCancel = true;
+      state.abortController?.abort();
       setStatus(tr('canceling'));
     });
     root.querySelector('#ifc-filter').addEventListener('input', renderList);
