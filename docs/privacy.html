@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Privacy Policy — IG MutualCheck</title>
+  <meta name="description" content="Privacy policy for the IG MutualCheck Chrome extension." />
+  <meta name="theme-color" content="#111827" />
+  <link rel="icon" href="assets/icon.png" />
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .policy { max-width: 720px; margin: 0 auto; padding: 60px 24px 80px; }
+    .policy h1 { font-size: 32px; font-weight: 850; margin: 0 0 8px; }
+    .policy .effective { color: var(--muted); font-size: 14px; margin-bottom: 40px; }
+    .policy h2 { font-size: 20px; font-weight: 800; margin: 36px 0 12px; }
+    .policy p, .policy li { font-size: 15px; line-height: 1.7; color: var(--ink); }
+    .policy ul { padding-left: 20px; }
+    .policy li { margin-bottom: 6px; }
+    .policy a { color: var(--blue); text-decoration: none; }
+    .policy a:hover { text-decoration: underline; }
+    .policy code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+    .back-link { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 32px; font-size: 14px; font-weight: 600; color: var(--blue); text-decoration: none; }
+    .back-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="animated-bg" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <a class="brand" href="index.html" aria-label="IG MutualCheck">
+      <img src="assets/icon.png" alt="IG MutualCheck logo" class="brand-icon" />
+      <span>IG MutualCheck</span>
+    </a>
+
+    <nav class="nav" aria-label="Main navigation">
+      <a href="index.html#features" data-i18n="navFeatures">Features</a>
+      <a href="index.html#privacy" data-i18n="navPrivacy">Privacy</a>
+      <a href="index.html#install" data-i18n="navInstall">Install</a>
+      <a href="index.html#faq" data-i18n="navFaq">FAQ</a>
+    </nav>
+
+    <button class="language-selector" id="language-selector" aria-label="Language" type="button">
+      <img class="lang-flag" id="lang-flag" src="assets/flags/4x3/us.svg" alt="" aria-hidden="true" />
+      <span id="lang-code">EN</span>
+    </button>
+  </header>
+
+  <div class="policy">
+    <a class="back-link" href="index.html" data-i18n="ppBack">&larr; Back to IG MutualCheck</a>
+
+    <h1 data-i18n="ppTitle">Privacy Policy</h1>
+    <p class="effective" data-i18n="ppEffective">Effective date: June 20, 2026</p>
+
+    <p data-i18n="ppIntro">IG MutualCheck ("the Extension") is an open-source Chrome extension that helps users identify Instagram accounts they follow that do not follow them back. This policy explains what data the Extension accesses, how it is handled, and what is stored.</p>
+
+    <h2 data-i18n="ppS1Title">1. Data the Extension accesses</h2>
+    <p data-i18n="ppS1Text">When you run an analysis, the Extension reads the following information from your authenticated Instagram session:</p>
+    <ul>
+      <li data-i18n="ppS1Li1">Your username and user ID.</li>
+      <li data-i18n="ppS1Li2">Your list of followers and accounts you follow (usernames, user IDs, display names, profile picture URLs, verified status, and private status).</li>
+    </ul>
+    <p data-i18n="ppS1Footer">This data is retrieved directly from Instagram's API using the session cookies already present in your browser. The Extension does not ask for your Instagram password.</p>
+
+    <h2 data-i18n="ppS2Title">2. How data is processed</h2>
+    <p data-i18n="ppS2Text">All data processing happens locally in your browser. The Extension compares your followers and following lists inside the browser tab and displays the results in a panel on the page. No data is sent to any external server, third-party service, or analytics platform.</p>
+
+    <h2 data-i18n="ppS3Title">3. Data stored on your device</h2>
+    <p data-i18n="ppS3Text">The Extension uses the chrome.storage.local API to store a single preference:</p>
+    <ul>
+      <li><strong data-i18n="ppS3Li1Label">Language preference</strong> — <span data-i18n="ppS3Li1Text">whether you selected English or Spanish for the Extension interface.</span></li>
+    </ul>
+    <p data-i18n="ppS3Footer">No Instagram data (usernames, followers, following lists, or analysis results) is persisted in local storage. Results exist only in memory while the panel is open and are discarded when the panel is closed or the page is reloaded.</p>
+
+    <h2 data-i18n="ppS4Title">4. Data the Extension does NOT collect</h2>
+    <ul>
+      <li data-i18n="ppS4Li1">No passwords or credentials.</li>
+      <li data-i18n="ppS4Li2">No personal data sent to external servers.</li>
+      <li data-i18n="ppS4Li3">No analytics, telemetry, or tracking.</li>
+      <li data-i18n="ppS4Li4">No cookies created or modified.</li>
+      <li data-i18n="ppS4Li5">No advertising or third-party SDKs.</li>
+    </ul>
+
+    <h2 data-i18n="ppS5Title">5. Exports</h2>
+    <p data-i18n="ppS5Text">You may choose to export analysis results as CSV or JSON files or copy them to the clipboard. These exports are generated locally in your browser and saved to your device. The Extension does not upload or transmit exported data.</p>
+
+    <h2 data-i18n="ppS6Title">6. Permissions used</h2>
+    <ul>
+      <li><strong>activeTab</strong> — <span data-i18n="ppS6Li1">to inject the Extension panel into the active Instagram tab.</span></li>
+      <li><strong>scripting</strong> — <span data-i18n="ppS6Li2">to inject content scripts when you activate the Extension.</span></li>
+      <li><strong>storage</strong> — <span data-i18n="ppS6Li3">to save your language preference locally.</span></li>
+      <li><strong>host_permissions (instagram.com)</strong> — <span data-i18n="ppS6Li4">to read your follower and following lists from Instagram's API using your existing session.</span></li>
+    </ul>
+
+    <h2 data-i18n="ppS7Title">7. Third-party services</h2>
+    <p data-i18n="ppS7Text">The Extension does not integrate with any third-party service. It communicates only with Instagram's API (www.instagram.com) using your existing browser session.</p>
+
+    <h2 data-i18n="ppS8Title">8. Children's privacy</h2>
+    <p data-i18n="ppS8Text">The Extension is not directed at children under 13. It requires an existing Instagram account, which is subject to Instagram's own age requirements.</p>
+
+    <h2 data-i18n="ppS9Title">9. Changes to this policy</h2>
+    <p data-i18n="ppS9Text">If this policy is updated, the new version will be published at this URL with an updated effective date. Continued use of the Extension after changes constitutes acceptance of the revised policy.</p>
+
+    <h2 data-i18n="ppS10Title">10. Contact</h2>
+    <p><span data-i18n="ppS10Text">For questions about this privacy policy, open an issue on the</span> <a href="https://github.com/juandiegoc30/ig-mutualcheck" target="_blank" rel="noopener noreferrer">GitHub repository</a>.</p>
+  </div>
+
+  <footer class="site-footer">
+    <div class="footer-inner section-shell compact-footer">
+      <p class="footer-disclaimer" data-i18n="footerDisclaimer">IG MutualCheck is an independent open-source project released under the MIT License. It is not affiliated with, endorsed by, sponsored by, or associated with Instagram, Meta, or any of their subsidiaries.</p>
+    </div>
+    <div class="footer-bottom section-shell">© 2026 Juan Diego Castellanos · <a href="https://github.com/juandiegoc30" target="_blank" rel="noopener noreferrer">github.com/juandiegoc30</a> · <a href="privacy.html" data-i18n="privacyPolicy">Privacy Policy</a></div>
+  </footer>
+
+  <script>
+  const I18N = {
+    en: {
+      navFeatures:'Features', navPrivacy:'Privacy', navInstall:'Install', navFaq:'FAQ',
+      ppBack:'← Back to IG MutualCheck',
+      ppTitle:'Privacy Policy',
+      ppEffective:'Effective date: June 20, 2026',
+      ppIntro:'IG MutualCheck ("the Extension") is an open-source Chrome extension that helps users identify Instagram accounts they follow that do not follow them back. This policy explains what data the Extension accesses, how it is handled, and what is stored.',
+      ppS1Title:'1. Data the Extension accesses',
+      ppS1Text:'When you run an analysis, the Extension reads the following information from your authenticated Instagram session:',
+      ppS1Li1:'Your username and user ID.',
+      ppS1Li2:'Your list of followers and accounts you follow (usernames, user IDs, display names, profile picture URLs, verified status, and private status).',
+      ppS1Footer:'This data is retrieved directly from Instagram’s API using the session cookies already present in your browser. The Extension does not ask for your Instagram password.',
+      ppS2Title:'2. How data is processed',
+      ppS2Text:'All data processing happens locally in your browser. The Extension compares your followers and following lists inside the browser tab and displays the results in a panel on the page. No data is sent to any external server, third-party service, or analytics platform.',
+      ppS3Title:'3. Data stored on your device',
+      ppS3Text:'The Extension uses the chrome.storage.local API to store a single preference:',
+      ppS3Li1Label:'Language preference',
+      ppS3Li1Text:'whether you selected English or Spanish for the Extension interface.',
+      ppS3Footer:'No Instagram data (usernames, followers, following lists, or analysis results) is persisted in local storage. Results exist only in memory while the panel is open and are discarded when the panel is closed or the page is reloaded.',
+      ppS4Title:'4. Data the Extension does NOT collect',
+      ppS4Li1:'No passwords or credentials.',
+      ppS4Li2:'No personal data sent to external servers.',
+      ppS4Li3:'No analytics, telemetry, or tracking.',
+      ppS4Li4:'No cookies created or modified.',
+      ppS4Li5:'No advertising or third-party SDKs.',
+      ppS5Title:'5. Exports',
+      ppS5Text:'You may choose to export analysis results as CSV or JSON files or copy them to the clipboard. These exports are generated locally in your browser and saved to your device. The Extension does not upload or transmit exported data.',
+      ppS6Title:'6. Permissions used',
+      ppS6Li1:'to inject the Extension panel into the active Instagram tab.',
+      ppS6Li2:'to inject content scripts when you activate the Extension.',
+      ppS6Li3:'to save your language preference locally.',
+      ppS6Li4:'to read your follower and following lists from Instagram’s API using your existing session.',
+      ppS7Title:'7. Third-party services',
+      ppS7Text:'The Extension does not integrate with any third-party service. It communicates only with Instagram’s API (www.instagram.com) using your existing browser session.',
+      ppS8Title:'8. Children’s privacy',
+      ppS8Text:'The Extension is not directed at children under 13. It requires an existing Instagram account, which is subject to Instagram’s own age requirements.',
+      ppS9Title:'9. Changes to this policy',
+      ppS9Text:'If this policy is updated, the new version will be published at this URL with an updated effective date. Continued use of the Extension after changes constitutes acceptance of the revised policy.',
+      ppS10Title:'10. Contact',
+      ppS10Text:'For questions about this privacy policy, open an issue on the',
+      footerDisclaimer:'IG MutualCheck is an independent open-source project released under the MIT License. It is not affiliated with, endorsed by, sponsored by, or associated with Instagram, Meta, or any of their subsidiaries.',
+      privacyPolicy:'Privacy Policy'
+    },
+    es: {
+      navFeatures:'Funciones', navPrivacy:'Privacidad', navInstall:'Instalación', navFaq:'FAQ',
+      ppBack:'← Volver a IG MutualCheck',
+      ppTitle:'Política de privacidad',
+      ppEffective:'Fecha de vigencia: 20 de junio de 2026',
+      ppIntro:'IG MutualCheck ("la Extensión") es una extensión de Chrome de código abierto que ayuda a los usuarios a identificar cuentas de Instagram que siguen y que no les siguen de vuelta. Esta política explica a qué datos accede la Extensión, cómo se gestionan y qué se almacena.',
+      ppS1Title:'1. Datos a los que accede la Extensión',
+      ppS1Text:'Cuando ejecutas un análisis, la Extensión lee la siguiente información desde tu sesión autenticada de Instagram:',
+      ppS1Li1:'Tu nombre de usuario e ID de usuario.',
+      ppS1Li2:'Tu lista de seguidores y cuentas seguidas (nombres de usuario, IDs, nombres completos, URLs de foto de perfil, estado de verificación y estado de privacidad).',
+      ppS1Footer:'Estos datos se obtienen directamente desde la API de Instagram usando las cookies de sesión ya presentes en tu navegador. La Extensión no solicita tu contraseña de Instagram.',
+      ppS2Title:'2. Cómo se procesan los datos',
+      ppS2Text:'Todo el procesamiento de datos ocurre localmente en tu navegador. La Extensión compara tus listas de seguidores y seguidos dentro de la pestaña del navegador y muestra los resultados en un panel en la página. No se envían datos a ningún servidor externo, servicio de terceros o plataforma de analítica.',
+      ppS3Title:'3. Datos almacenados en tu dispositivo',
+      ppS3Text:'La Extensión usa la API chrome.storage.local para almacenar una única preferencia:',
+      ppS3Li1Label:'Preferencia de idioma',
+      ppS3Li1Text:'si seleccionaste inglés o español para la interfaz de la Extensión.',
+      ppS3Footer:'Ningún dato de Instagram (nombres de usuario, seguidores, listas de seguidos o resultados de análisis) se almacena de forma persistente. Los resultados solo existen en memoria mientras el panel está abierto y se descartan al cerrar el panel o recargar la página.',
+      ppS4Title:'4. Datos que la Extensión NO recopila',
+      ppS4Li1:'No recopila contraseñas ni credenciales.',
+      ppS4Li2:'No envía datos personales a servidores externos.',
+      ppS4Li3:'No incluye analítica, telemetría ni rastreo.',
+      ppS4Li4:'No crea ni modifica cookies.',
+      ppS4Li5:'No incluye publicidad ni SDKs de terceros.',
+      ppS5Title:'5. Exportaciones',
+      ppS5Text:'Puedes exportar los resultados del análisis como archivos CSV o JSON, o copiarlos al portapapeles. Estas exportaciones se generan localmente en tu navegador y se guardan en tu dispositivo. La Extensión no sube ni transmite datos exportados.',
+      ppS6Title:'6. Permisos utilizados',
+      ppS6Li1:'para inyectar el panel de la Extensión en la pestaña activa de Instagram.',
+      ppS6Li2:'para inyectar scripts de contenido cuando activas la Extensión.',
+      ppS6Li3:'para guardar tu preferencia de idioma localmente.',
+      ppS6Li4:'para leer tus listas de seguidores y seguidos desde la API de Instagram usando tu sesión existente.',
+      ppS7Title:'7. Servicios de terceros',
+      ppS7Text:'La Extensión no se integra con ningún servicio de terceros. Solo se comunica con la API de Instagram (www.instagram.com) usando tu sesión de navegador existente.',
+      ppS8Title:'8. Privacidad de menores',
+      ppS8Text:'La Extensión no está dirigida a menores de 13 años. Requiere una cuenta de Instagram existente, que está sujeta a los requisitos de edad de Instagram.',
+      ppS9Title:'9. Cambios en esta política',
+      ppS9Text:'Si esta política se actualiza, la nueva versión se publicará en esta URL con una fecha de vigencia actualizada. El uso continuado de la Extensión después de los cambios constituye la aceptación de la política revisada.',
+      ppS10Title:'10. Contacto',
+      ppS10Text:'Para preguntas sobre esta política de privacidad, abre un issue en el',
+      footerDisclaimer:'IG MutualCheck es un proyecto open source independiente publicado bajo licencia MIT. No está afiliado, respaldado, patrocinado ni asociado con Instagram, Meta o cualquiera de sus subsidiarias.',
+      privacyPolicy:'Política de privacidad'
+    }
+  };
+
+  const selector = document.getElementById('language-selector');
+  const langFlag = document.getElementById('lang-flag');
+  const langCode = document.getElementById('lang-code');
+  let lang = localStorage.getItem('ifcLandingLang') || (navigator.language.toLowerCase().startsWith('es') ? 'es' : 'en');
+
+  function getFlagUrl(nextLang) {
+    return 'assets/flags/4x3/' + (nextLang === 'es' ? 'es' : 'us') + '.svg';
+  }
+
+  function applyLang(nextLang) {
+    lang = I18N[nextLang] ? nextLang : 'en';
+    localStorage.setItem('ifcLandingLang', lang);
+    document.documentElement.lang = lang;
+    if (langFlag) langFlag.src = getFlagUrl(lang);
+    if (langCode) langCode.textContent = lang.toUpperCase();
+    document.querySelectorAll('[data-i18n]').forEach(function(el) {
+      var key = el.dataset.i18n;
+      if (I18N[lang][key]) el.textContent = I18N[lang][key];
+    });
+  }
+
+  selector.addEventListener('click', function() { applyLang(lang === 'en' ? 'es' : 'en'); });
+  applyLang(lang);
+  </script>
+</body>
+</html>
