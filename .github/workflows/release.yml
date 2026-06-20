@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify release tag
+        run: npm run release:verify
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+
+      - name: Run project checks and package extension
+        run: npm run check
+
+      - name: Resolve package path
+        id: package
+        run: |
+          VERSION=$(node -p "require('./manifest.json').version")
+          echo "path=dist/ig-mutualcheck-v${VERSION}.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        run: gh release create "$GITHUB_REF_NAME" "${{ steps.package.outputs.path }}" --generate-notes --title "IG MutualCheck $GITHUB_REF_NAME"
+        env:
+          GH_TOKEN: ${{ github.token }}

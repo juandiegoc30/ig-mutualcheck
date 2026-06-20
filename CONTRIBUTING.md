@@ -19,7 +19,8 @@ If you have a larger feature idea, open an issue first to discuss it before writ
    - Click **Load unpacked** and select the project folder.
 3. Open `https://www.instagram.com/` while logged in and click the extension icon.
 
-There is no build step. All logic lives in `src/content.js` and `src/background.js`.
+There is no application build step. Extension logic lives in `src/`, while
+packaging and repository checks live in `scripts/`.
 
 ## Making changes
 
@@ -27,6 +28,7 @@ There is no build step. All logic lives in `src/content.js` and `src/background.
 - Test the extension manually on a real Instagram session before submitting.
 - If you modify the UI, verify both English and Spanish strings are updated in `src/content.js`.
 - Do not commit `node_modules/` or any generated zip files.
+- Run `npm run check` before submitting a pull request.
 
 ## Submitting a pull request
 
@@ -39,6 +41,15 @@ There is no build step. All logic lives in `src/content.js` and `src/background.
 - Plain JavaScript (no TypeScript, no bundler).
 - Prefer clarity over cleverness — this code runs in people's browsers against their accounts.
 - No external dependencies in `src/`. The extension must work fully offline after installation.
+
+## Creating a release
+
+1. Update the version in both `package.json` and `manifest.json`.
+2. Merge the version change into `main`.
+3. Create and push a matching tag, such as `v1.2.0`.
+
+The release workflow validates the tag, runs all checks, generates the minimal
+extension ZIP, creates a GitHub Release, and attaches the ZIP automatically.
 
 ## Reporting issues
 
