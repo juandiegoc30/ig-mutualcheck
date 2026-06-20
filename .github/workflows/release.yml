@@ -38,8 +38,12 @@ jobs:
         run: |
           VERSION=$(node -p "require('./manifest.json').version")
           echo "path=dist/ig-mutualcheck-v${VERSION}.zip" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare release notes
+        run: npm run release:notes -- "${{ steps.package.outputs.version }}" dist/release-notes.md
 
       - name: Create GitHub release
-        run: gh release create "$GITHUB_REF_NAME" "${{ steps.package.outputs.path }}" --generate-notes --title "IG MutualCheck $GITHUB_REF_NAME"
+        run: gh release create "$GITHUB_REF_NAME" "${{ steps.package.outputs.path }}" --notes-file dist/release-notes.md --title "IG MutualCheck $GITHUB_REF_NAME"
         env:
           GH_TOKEN: ${{ github.token }}

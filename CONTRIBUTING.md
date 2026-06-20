@@ -45,11 +45,13 @@ packaging and repository checks live in `scripts/`.
 ## Creating a release
 
 1. Update the version in both `package.json` and `manifest.json`.
-2. Merge the version change into `main`.
-3. Create and push a matching tag, such as `v1.2.0`.
+2. Add a matching section to `CHANGELOG.md`.
+3. Merge the version and changelog changes into `main`.
+4. Create and push a matching tag, such as `v1.2.0`.
 
 The release workflow validates the tag, runs all checks, generates the minimal
-extension ZIP, creates a GitHub Release, and attaches the ZIP automatically.
+extension ZIP, extracts the matching notes from `CHANGELOG.md`, creates a
+GitHub Release, and attaches the ZIP automatically.
 
 ## Reporting issues
 
