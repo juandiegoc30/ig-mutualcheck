@@ -17,7 +17,7 @@ chrome.action.onClicked.addListener(async (tab) => {
   }).catch(async () => {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      files: ['src/content.js']
+      files: ['src/core.js', 'src/content.js']
     });
 
     await chrome.tabs.sendMessage(tab.id, {
