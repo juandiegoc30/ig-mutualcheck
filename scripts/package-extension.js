@@ -17,6 +17,7 @@ const outputName = `ig-mutualcheck-v${manifest.version}.zip`;
 const outputPath = path.join(outputDir, outputName);
 const extensionFiles = [
   'manifest.json',
+  '_locales',
   'src',
   'assets/icon.png',
   'assets/icon-16.png',

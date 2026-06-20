@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "IG MutualCheck"
+  },
+  "extensionDescription": {
+    "message": "Analyze your Instagram account, filter results, and detect accounts that don't follow you back."
+  },
+  "actionTitle": {
+    "message": "IG MutualCheck"
+  }
+}
