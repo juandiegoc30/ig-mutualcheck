@@ -168,6 +168,7 @@
   };
 
   let currentLang = navigator.language && navigator.language.toLowerCase().startsWith('es') ? 'es' : 'en';
+  let previouslyFocusedElement = null;
 
   function getLangFlagUrl(lang) {
     const code = lang === 'es' ? 'es' : 'us';
@@ -220,7 +221,10 @@
     if (copyBtn) copyBtn.title = tr('copy');
     setText('ifc-export', 'export');
     const exportBtn = $('ifc-export');
-    if (exportBtn) exportBtn.title = tr('exportOptions');
+    if (exportBtn) {
+      exportBtn.title = tr('exportOptions');
+      exportBtn.setAttribute('aria-label', tr('exportOptions'));
+    }
     setText('ifc-export-csv', 'exportCsv');
     setText('ifc-export-json', 'exportJson');
     setText('ifc-clear-filter', 'clearFilter');
@@ -239,14 +243,21 @@
     setText('ifc-metric-notback', 'notFollowing');
 
     const close = $('ifc-close');
-    if (close) close.title = tr('close');
+    if (close) {
+      close.title = tr('close');
+      close.setAttribute('aria-label', tr('close'));
+    }
 
     const filter = $('ifc-filter');
-    if (filter) filter.placeholder = tr('searchPlaceholder');
+    if (filter) {
+      filter.placeholder = tr('searchPlaceholder');
+      filter.setAttribute('aria-label', tr('searchPlaceholder'));
+    }
 
     const mode = $('ifc-filter-mode');
     if (mode) {
       mode.title = tr('searchModeTitle');
+      mode.setAttribute('aria-label', tr('searchModeTitle'));
       mode.querySelector('option[value="contains"]').textContent = tr('contains');
       mode.querySelector('option[value="starts"]').textContent = tr('starts');
       mode.querySelector('option[value="exact"]').textContent = tr('exact');
@@ -256,6 +267,7 @@
     const type = $('ifc-account-type');
     if (type) {
       type.title = tr('accountTypeTitle');
+      type.setAttribute('aria-label', tr('accountTypeTitle'));
       type.querySelector('option[value="all"]').textContent = tr('all');
       type.querySelector('option[value="verified"]').textContent = tr('verified');
       type.querySelector('option[value="not_verified"]').textContent = tr('notVerified');
@@ -309,11 +321,37 @@
     notFollowingBack: [],
     unfollowRunning: false,
     unfollowCancel: false,
-    selectedToUnfollow: new Set()
+    selectedToUnfollow: new Set(),
+    abortController: null
   };
 
-  function sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  function createAbortError() {
+    return new DOMException(tr('canceledByUser'), 'AbortError');
+  }
+
+  function isAbortError(error) {
+    return error?.name === 'AbortError';
+  }
+
+  function sleep(ms, signal) {
+    return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(createAbortError());
+        return;
+      }
+
+      const timeoutId = setTimeout(() => {
+        signal?.removeEventListener('abort', handleAbort);
+        resolve();
+      }, ms);
+
+      function handleAbort() {
+        clearTimeout(timeoutId);
+        reject(createAbortError());
+      }
+
+      signal?.addEventListener('abort', handleAbort, { once: true });
+    });
   }
 
   function getCookie(name) {
@@ -349,7 +387,8 @@
         ...(method !== 'GET' ? { 'x-csrftoken': csrfToken } : {}),
         ...(options.headers || {})
       },
-      body: options.body
+      body: options.body,
+      signal: options.signal
     });
 
     if (!response.ok) {
@@ -370,8 +409,8 @@
     return data;
   }
 
-  async function getCurrentUserFromEditData() {
-    const data = await igFetch(`${API_BASE}/accounts/edit/web_form_data/`);
+  async function getCurrentUserFromEditData(signal) {
+    const data = await igFetch(`${API_BASE}/accounts/edit/web_form_data/`, { signal });
     const formData = data?.form_data || {};
     const username = normalizeUsername(formData.username);
     const userId = formData.user_id || formData.username_id || formData.pk || formData.id;
@@ -383,9 +422,12 @@
     return { username, userId: userId ? String(userId) : null };
   }
 
-  async function getUserIdByUsername(username) {
+  async function getUserIdByUsername(username, signal) {
     const cleanUsername = normalizeUsername(username);
-    const data = await igFetch(`${API_BASE}/users/web_profile_info/?username=${encodeURIComponent(cleanUsername)}`);
+    const data = await igFetch(
+      `${API_BASE}/users/web_profile_info/?username=${encodeURIComponent(cleanUsername)}`,
+      { signal }
+    );
     const userId = data?.data?.user?.id;
 
     if (!userId) {
@@ -395,18 +437,18 @@
     return String(userId);
   }
 
-  async function getCurrentUser() {
-    const user = await getCurrentUserFromEditData();
+  async function getCurrentUser(signal) {
+    const user = await getCurrentUserFromEditData(signal);
 
     if (user.userId) {
       return user;
     }
 
-    const userId = await getUserIdByUsername(user.username);
+    const userId = await getUserIdByUsername(user.username, signal);
     return { ...user, userId };
   }
 
-  async function getRelationshipList(userId, type, onProgress) {
+  async function getRelationshipList(userId, type, onProgress, signal) {
     const users = [];
     const seen = new Set();
     let maxId = '';
@@ -414,11 +456,11 @@
 
     while (true) {
       if (state.shouldCancel) {
-        throw new Error(tr('canceledByUser'));
+        throw createAbortError();
       }
 
       const url = `${API_BASE}/friendships/${userId}/${type}/?count=50${maxId ? `&max_id=${encodeURIComponent(maxId)}` : ''}`;
-      const data = await igFetch(url);
+      const data = await igFetch(url, { signal });
       const pageUsers = Array.isArray(data.users) ? data.users : [];
 
       for (const user of pageUsers) {
@@ -443,19 +485,20 @@
       maxId = data.next_max_id;
       page += 1;
 
-      await sleep(1100);
+      await sleep(1100, signal);
     }
 
     return users;
   }
 
-  async function unfollowUser(user) {
+  async function unfollowUser(user, signal) {
     if (!user.userId) {
-      user.userId = await getUserIdByUsername(user.username);
+      user.userId = await getUserIdByUsername(user.username, signal);
     }
 
     return igFetch(`${API_BASE}/friendships/destroy/${encodeURIComponent(user.userId)}/`, {
-      method: 'POST'
+      method: 'POST',
+      signal
     });
   }
 
@@ -1126,10 +1169,15 @@
 
     const root = document.createElement('div');
     root.id = 'ifc-root';
+    root.setAttribute('role', 'dialog');
+    root.setAttribute('aria-modal', 'true');
+    root.setAttribute('aria-labelledby', 'ifc-title');
+    root.setAttribute('aria-describedby', 'ifc-footer-text');
+    root.tabIndex = -1;
     root.innerHTML = `
       <div class="ifc-header">
         <div class="ifc-header-main">
-          <p class="ifc-title">IG MutualCheck</p>
+          <p class="ifc-title" id="ifc-title">IG MutualCheck</p>
           <div class="ifc-subtitle" id="ifc-account" title="Cuenta: no detectada">Cuenta: no detectada</div>
         </div>
         <div class="ifc-header-right">
@@ -1137,7 +1185,7 @@
             <img class="ifc-language-flag" id="ifc-language-flag" src="${getLangFlagUrl('es')}" alt="" aria-hidden="true" />
             <span id="ifc-language-code">ES</span>
           </button>
-          <button class="ifc-close" id="ifc-close" title="Cerrar">×</button>
+          <button class="ifc-close" id="ifc-close" type="button" title="Cerrar" aria-label="Cerrar">×</button>
         </div>
       </div>
 
@@ -1147,16 +1195,16 @@
           <button class="ifc-btn ifc-btn-danger" id="ifc-cancel" disabled title="Cancelar">Cancelar</button>
           <button class="ifc-btn ifc-btn-secondary" id="ifc-copy" disabled title="Copiar lista">Copiar lista</button>
           <div class="ifc-export-wrap">
-            <button class="ifc-btn ifc-btn-secondary" id="ifc-export" disabled title="Opciones de exportación">Exportar</button>
-            <div class="ifc-export-menu" id="ifc-export-menu" hidden>
-              <button class="ifc-export-option" id="ifc-export-csv" type="button">Exportar CSV</button>
-              <button class="ifc-export-option" id="ifc-export-json" type="button">Exportar JSON</button>
+            <button class="ifc-btn ifc-btn-secondary" id="ifc-export" disabled title="Opciones de exportación" aria-haspopup="menu" aria-expanded="false" aria-controls="ifc-export-menu">Exportar</button>
+            <div class="ifc-export-menu" id="ifc-export-menu" role="menu" hidden>
+              <button class="ifc-export-option" id="ifc-export-csv" type="button" role="menuitem">Exportar CSV</button>
+              <button class="ifc-export-option" id="ifc-export-json" type="button" role="menuitem">Exportar JSON</button>
             </div>
           </div>
         </div>
 
-        <div class="ifc-status" id="ifc-status">Abre Instagram con tu sesión iniciada y presiona “Analizar cuenta”.</div>
-        <div id="ifc-error-container"></div>
+        <div class="ifc-status" id="ifc-status" role="status" aria-live="polite">Abre Instagram con tu sesión iniciada y presiona “Analizar cuenta”.</div>
+        <div id="ifc-error-container" aria-live="assertive"></div>
 
         <div class="ifc-metrics">
           <div class="ifc-metric">
@@ -1299,11 +1347,17 @@
     const hasSelected = getSelectedUsers().length > 0;
     const busy = state.isRunning || state.unfollowRunning;
 
-    $('ifc-start').disabled = busy;
-    $('ifc-cancel').disabled = !busy;
-    $('ifc-copy').disabled = !hasResults;
-    $('ifc-export').disabled = !hasResults;
-    $('ifc-unfollow').disabled = !hasResults || !hasSelected || busy;
+    const start = $('ifc-start');
+    const cancel = $('ifc-cancel');
+    const copy = $('ifc-copy');
+    const exportButton = $('ifc-export');
+    const unfollow = $('ifc-unfollow');
+
+    if (start) start.disabled = busy;
+    if (cancel) cancel.disabled = !busy;
+    if (copy) copy.disabled = !hasResults;
+    if (exportButton) exportButton.disabled = !hasResults;
+    if (unfollow) unfollow.disabled = !hasResults || !hasSelected || busy;
     updateSelectionUi();
   }
 
@@ -1314,8 +1368,10 @@
 
   function enableExportButtons(enabled) {
     const hasResults = Boolean(enabled) && state.notFollowingBack.length > 0;
-    $('ifc-copy').disabled = !hasResults;
-    $('ifc-export').disabled = !hasResults;
+    const copy = $('ifc-copy');
+    const exportButton = $('ifc-export');
+    if (copy) copy.disabled = !hasResults;
+    if (exportButton) exportButton.disabled = !hasResults;
     refreshActionButtons();
   }
 
@@ -1325,14 +1381,21 @@
   }
 
   function updateMetrics() {
-    $('ifc-followers').textContent = String(state.followers.length);
-    $('ifc-following').textContent = String(state.following.length);
-    $('ifc-notback').textContent = String(state.notFollowingBack.length);
+    const followers = $('ifc-followers');
+    const following = $('ifc-following');
+    const notFollowingBack = $('ifc-notback');
+
+    if (followers) followers.textContent = String(state.followers.length);
+    if (following) following.textContent = String(state.following.length);
+    if (notFollowingBack) notFollowingBack.textContent = String(state.notFollowingBack.length);
 
     if (state.currentUser?.username) {
       const accountText = `${tr('account')}: @${state.currentUser.username}`;
-      $('ifc-account').textContent = accountText;
-      $('ifc-account').title = accountText;
+      const account = $('ifc-account');
+      if (account) {
+        account.textContent = accountText;
+        account.title = accountText;
+      }
     }
   }
 
@@ -1369,6 +1432,8 @@
 
   function renderList() {
     const list = $('ifc-list');
+    if (!list) return;
+
     const results = getFilteredResults();
     const counter = $('ifc-filter-count');
 
@@ -1468,12 +1533,98 @@
     setStatus(tr('copied'));
   }
 
+  function setExportMenuOpen(isOpen, { focusFirst = false } = {}) {
+    const menu = $('ifc-export-menu');
+    const button = $('ifc-export');
+    if (!menu || !button) return;
+
+    menu.hidden = !isOpen;
+    button.setAttribute('aria-expanded', String(isOpen));
+
+    if (isOpen && focusFirst) {
+      menu.querySelector('[role="menuitem"]')?.focus();
+    }
+  }
+
   function closeExportMenuOnOutsideClick(event) {
     const menu = $('ifc-export-menu');
     const button = $('ifc-export');
     if (!menu || menu.hidden) return;
     if (menu.contains(event.target) || button?.contains(event.target)) return;
-    menu.hidden = true;
+    setExportMenuOpen(false);
+  }
+
+  function closePanel() {
+    const root = $('ifc-root');
+    if (!root) return;
+
+    state.shouldCancel = true;
+    state.unfollowCancel = true;
+    state.abortController?.abort();
+    root.remove();
+
+    if (previouslyFocusedElement?.isConnected) {
+      previouslyFocusedElement.focus();
+    }
+    previouslyFocusedElement = null;
+  }
+
+  function handlePanelKeydown(event) {
+    const root = $('ifc-root');
+    if (!root) return;
+
+    if (event.target?.getAttribute?.('role') === 'menuitem') {
+      const items = Array.from(root.querySelectorAll('#ifc-export-menu [role="menuitem"]'));
+      const currentIndex = items.indexOf(event.target);
+
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        const direction = event.key === 'ArrowDown' ? 1 : -1;
+        items[(currentIndex + direction + items.length) % items.length]?.focus();
+        return;
+      }
+
+      if (event.key === 'Home' || event.key === 'End') {
+        event.preventDefault();
+        items[event.key === 'Home' ? 0 : items.length - 1]?.focus();
+        return;
+      }
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      const menu = $('ifc-export-menu');
+      if (menu && !menu.hidden) {
+        setExportMenuOpen(false);
+        $('ifc-export')?.focus();
+      } else {
+        closePanel();
+      }
+      return;
+    }
+
+    if (event.key !== 'Tab') return;
+
+    const focusable = Array.from(root.querySelectorAll(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+    )).filter((element) => !element.closest('[hidden]') && element.getClientRects().length > 0);
+
+    if (!focusable.length) {
+      event.preventDefault();
+      root.focus();
+      return;
+    }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 
   function getUnfollowDelay() {
@@ -1516,9 +1667,13 @@
     setError('');
     setUnfollowRunning(true);
     state.unfollowCancel = false;
+    const controller = new AbortController();
+    state.abortController = controller;
 
     const succeeded = [];
     const failed = [];
+    let canceled = false;
+    let fatalError = null;
 
     try {
       for (let i = 0; i < usersToUnfollow.length; i += 1) {
@@ -1531,9 +1686,10 @@
         setStatus(tr('unfollowingUser', { username: user.username, current: i + 1, total }));
 
         try {
-          await unfollowUser(user);
+          await unfollowUser(user, controller.signal);
           succeeded.push(user.username);
         } catch (error) {
+          if (isAbortError(error)) throw error;
           failed.push({ username: user.username, error: error.message || String(error) });
         }
 
@@ -1542,10 +1698,15 @@
         if (i < usersToUnfollow.length - 1 && !(state.unfollowCancel || state.shouldCancel)) {
           const delay = getUnfollowDelay();
           setStatus(tr('pauseBeforeNext', { seconds: (delay / 1000).toFixed(1), current: i + 1, total }));
-          await sleep(delay);
+          await sleep(delay, controller.signal);
         }
       }
+    } catch (error) {
+      if (isAbortError(error)) canceled = true;
+      else fatalError = error;
+    }
 
+    try {
       if (succeeded.length) {
         const succeededSet = new Set(succeeded.map(normalizeUsername));
         state.following = state.following.filter((user) => !succeededSet.has(normalizeUsername(user.username)));
@@ -1560,15 +1721,22 @@
       window.igMutualCheckUnfollowResult = {
         succeeded,
         failed,
+        canceled,
         generatedAt: new Date().toISOString()
       };
 
-      setStatus(tr('unfollowDone', { success: succeeded.length, failed: failed.length }));
-
-      if (failed.length) {
-        setError(tr('unfollowFailed'));
+      if (fatalError) {
+        setError(fatalError.message || String(fatalError));
+        setStatus(tr('analysisError'));
+      } else if (canceled) {
+        setStatus(tr('unfollowCanceled'));
+      } else {
+        setStatus(tr('unfollowDone', { success: succeeded.length, failed: failed.length }));
       }
+
+      if (failed.length) setError(tr('unfollowFailed'));
     } finally {
+      if (state.abortController === controller) state.abortController = null;
       state.unfollowCancel = false;
       state.shouldCancel = false;
       setUnfollowRunning(false);
@@ -1588,26 +1756,28 @@
     state.selectedToUnfollow.clear();
     updateMetrics();
     renderList();
+    const controller = new AbortController();
+    state.abortController = controller;
 
     try {
       setStatus(tr('detecting'));
-      state.currentUser = await getCurrentUser();
+      state.currentUser = await getCurrentUser(controller.signal);
       updateMetrics();
 
       setStatus(tr('readingFollowers', { username: state.currentUser.username }));
       state.followers = await getRelationshipList(state.currentUser.userId, 'followers', ({ count }) => {
         setStatus(tr('readingFollowersProgress', { count }));
         updateMetrics();
-      });
+      }, controller.signal);
       updateMetrics();
 
-      await sleep(1200);
+      await sleep(1200, controller.signal);
 
       setStatus(tr('readingFollowing', { username: state.currentUser.username }));
       state.following = await getRelationshipList(state.currentUser.userId, 'following', ({ count }) => {
         setStatus(tr('readingFollowingProgress', { count }));
         updateMetrics();
-      });
+      }, controller.signal);
       updateMetrics();
 
       state.notFollowingBack = compareLists(state.followers, state.following);
@@ -1627,15 +1797,22 @@
         generatedAt: new Date().toISOString()
       };
     } catch (error) {
-      setError(error.message || String(error));
-      setStatus(tr('analysisError'));
+      if (isAbortError(error)) {
+        setStatus(tr('canceledByUser'));
+      } else {
+        setError(error.message || String(error));
+        setStatus(tr('analysisError'));
+      }
     } finally {
+      if (state.abortController === controller) state.abortController = null;
+      state.shouldCancel = false;
       setRunning(false);
     }
   }
 
   function bindEvents(root) {
-    root.querySelector('#ifc-close').addEventListener('click', () => root.remove());
+    root.addEventListener('keydown', handlePanelKeydown);
+    root.querySelector('#ifc-close').addEventListener('click', closePanel);
     root.querySelector('#ifc-language').addEventListener('click', async () => {
       await saveLanguagePreference(currentLang === 'es' ? 'en' : 'es');
       applyTranslations();
@@ -1645,6 +1822,7 @@
     root.querySelector('#ifc-cancel').addEventListener('click', () => {
       state.shouldCancel = true;
       state.unfollowCancel = true;
+      state.abortController?.abort();
       setStatus(tr('canceling'));
     });
     root.querySelector('#ifc-filter').addEventListener('input', renderList);
@@ -1670,16 +1848,14 @@
     root.querySelector('#ifc-export').addEventListener('click', (event) => {
       event.stopPropagation();
       const menu = $('ifc-export-menu');
-      if (menu) menu.hidden = !menu.hidden;
+      if (menu) setExportMenuOpen(menu.hidden, { focusFirst: menu.hidden });
     });
     root.querySelector('#ifc-export-csv').addEventListener('click', () => {
-      const menu = $('ifc-export-menu');
-      if (menu) menu.hidden = true;
+      setExportMenuOpen(false);
       downloadFile('instagram-no-followback.csv', toCsv(getFilteredResults()), 'text/csv;charset=utf-8');
     });
     root.querySelector('#ifc-export-json').addEventListener('click', () => {
-      const menu = $('ifc-export-menu');
-      if (menu) menu.hidden = true;
+      setExportMenuOpen(false);
       const filteredResults = getFilteredResults();
       downloadFile('instagram-no-followback.json', JSON.stringify({
         account: state.currentUser,
@@ -1694,13 +1870,17 @@
   async function togglePanel() {
     const existing = document.getElementById('ifc-root');
     if (existing) {
-      existing.remove();
+      closePanel();
       return;
     }
 
+    previouslyFocusedElement = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
     await loadLanguagePreference();
-    createPanel();
+    const root = createPanel();
     applyTranslations();
+    root.querySelector('#ifc-start')?.focus();
   }
 
   chrome.runtime.onMessage.addListener((message) => {

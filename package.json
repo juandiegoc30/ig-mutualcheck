@@ -1,12 +1,13 @@
 {
   "name": "ig-mutualcheck",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Chrome/Edge extension to check which Instagram accounts you follow do not follow you back.",
   "private": true,
   "scripts": {
     "lint": "node scripts/check-syntax.js",
     "test": "node --test",
     "check": "npm run lint && npm test && npm run package",
+    "release:verify": "node scripts/check-release-tag.js",
     "package": "node scripts/package-extension.js",
     "zip": "npm run package"
   },
