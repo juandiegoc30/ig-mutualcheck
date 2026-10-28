@@ -2,6 +2,26 @@
 
 All notable changes to IG MutualCheck are documented in this file.
 
+## [1.1.2] - 2026-10-28
+
+### Fixed
+
+- Fixed HTTP 429 errors when starting an analysis. The authenticated user ID
+  is now taken from the session (`ds_user_id` cookie) instead of requesting
+  `web_profile_info`, which remains only as a last-resort fallback. Identity
+  is cached per session and refreshed when the Instagram account changes.
+- Added typed API errors and `Retry-After` support. After a 429, IG MutualCheck
+  stops all requests during a cooldown and recovers on its own when it ends.
+- The unfollow process now stops on rate-limit, session, forbidden, and
+  network errors instead of continuing with the next account.
+- A failure now shows a single localized error message (Spanish and English)
+  instead of two.
+
+### Testing
+
+- Added mocked tests for identity resolution, 429 handling, pagination
+  failures, HTTP status mapping, network errors, and localized messages.
+
 ## [1.1.1] - 2026-06-19
 
 IG MutualCheck 1.1.1 is a reliability and maintenance release focused on
