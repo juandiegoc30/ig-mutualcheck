@@ -78,10 +78,11 @@
       readingFollowing: 'Leyendo cuentas seguidas por @{username}...',
       readingFollowingProgress: 'Leyendo seguidos... {count} encontrados.',
       analysisDone: 'Análisis terminado. {count} cuentas no te siguen de vuelta.',
-      analysisError: 'No se pudo completar el análisis. Verifica que tengas sesión iniciada en Instagram o intenta más tarde.',
-      apiUnauthorized: 'La sesión de Instagram expiró o no es válida. Recarga Instagram e inicia sesión nuevamente.',
+      unexpectedError: 'No fue posible completar el análisis debido a un error inesperado.',
+      apiNetworkError: 'No se pudo establecer conexión con Instagram. Verifica tu conexión e inténtalo nuevamente.',
+      apiUnauthorized: 'No se pudo verificar tu sesión de Instagram. Inicia sesión nuevamente e inténtalo.',
       apiForbidden: 'Instagram bloqueó temporalmente esta solicitud. Espera unos minutos antes de intentarlo otra vez.',
-      apiRateLimited: 'Instagram alcanzó el límite de solicitudes. Espera unos minutos antes de volver a intentarlo.',
+      apiRateLimited: 'Instagram ha limitado temporalmente las solicitudes. Intenta realizar el análisis más tarde.',
       apiServerError: 'Instagram no está disponible temporalmente (error {status}). Intenta más tarde.',
       apiRequestError: 'Instagram rechazó la solicitud (error {status}).',
       apiInvalidResponse: 'Instagram devolvió una respuesta inválida. Recarga la página e intenta nuevamente.',
@@ -154,10 +155,11 @@
       readingFollowing: 'Reading accounts followed by @{username}...',
       readingFollowingProgress: 'Reading following... {count} found.',
       analysisDone: 'Analysis complete. {count} accounts do not follow you back.',
-      analysisError: 'Could not complete the analysis. Check that you are logged in to Instagram or try again later.',
-      apiUnauthorized: 'Your Instagram session expired or is invalid. Reload Instagram and sign in again.',
+      unexpectedError: 'The analysis could not be completed due to an unexpected error.',
+      apiNetworkError: 'Could not connect to Instagram. Check your connection and try again.',
+      apiUnauthorized: 'Your Instagram session could not be verified. Sign in again and retry.',
       apiForbidden: 'Instagram temporarily blocked this request. Wait a few minutes before trying again.',
-      apiRateLimited: 'Instagram reached its request limit. Wait a few minutes before trying again.',
+      apiRateLimited: 'Instagram has temporarily limited requests. Try running the analysis later.',
       apiServerError: 'Instagram is temporarily unavailable (error {status}). Try again later.',
       apiRequestError: 'Instagram rejected the request (error {status}).',
       apiInvalidResponse: 'Instagram returned an invalid response. Reload the page and try again.',
@@ -361,12 +363,53 @@
     return '';
   }
 
-  function getApiErrorMessage(status) {
-    if (status === 401) return tr('apiUnauthorized');
-    if (status === 403) return tr('apiForbidden');
-    if (status === 429) return tr('apiRateLimited');
-    if (status >= 500) return tr('apiServerError', { status });
-    return tr('apiRequestError', { status });
+  const DEFAULT_RATE_LIMIT_MS = 10 * 60 * 1000;
+  const MAX_RATE_LIMIT_MS = 60 * 60 * 1000;
+  const RATE_LIMIT_STORAGE_KEY = 'ifcRateLimitUntil';
+  let rateLimitUntil = 0;
+  let identityCache = null;
+
+  // Typed error: `code` drives behavior, `key`/`params` are translated when displayed
+  // so the message follows the language toggle.
+  class IgError extends Error {
+    constructor(code, key, params = {}, extra = {}) {
+      super(key);
+      this.name = 'IgError';
+      this.code = code;
+      this.key = key;
+      this.params = params;
+      Object.assign(this, extra);
+    }
+  }
+
+  const FATAL_CODES = new Set(['rate_limited', 'unauthorized', 'forbidden', 'network']);
+
+  function isFatalApiError(error) {
+    return error instanceof IgError && FATAL_CODES.has(error.code);
+  }
+
+  function describeError(error) {
+    return error instanceof IgError ? tr(error.key, error.params) : tr('unexpectedError');
+  }
+
+  function parseRetryAfter(header) {
+    if (!header) return 0;
+    const seconds = Number(header);
+    const ms = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(header) - Date.now();
+    return Number.isFinite(ms) && ms > 0 ? ms : 0;
+  }
+
+  async function loadRateLimit() {
+    try {
+      const stored = await chrome.storage?.local?.get?.(RATE_LIMIT_STORAGE_KEY);
+      rateLimitUntil = Math.max(rateLimitUntil, Number(stored?.[RATE_LIMIT_STORAGE_KEY]) || 0);
+    } catch (_) {}
+  }
+
+  async function startRateLimit(retryAfterMs) {
+    const wait = Math.min(retryAfterMs || DEFAULT_RATE_LIMIT_MS, MAX_RATE_LIMIT_MS);
+    rateLimitUntil = Date.now() + wait;
+    try { await chrome.storage?.local?.set?.({ [RATE_LIMIT_STORAGE_KEY]: rateLimitUntil }); } catch (_) {}
   }
 
   async function igFetch(url, options = {}) {
@@ -374,36 +417,56 @@
     const csrfToken = method !== 'GET' ? getCookie('csrftoken') : '';
 
     if (method !== 'GET' && !csrfToken) {
-      throw new Error(tr('csrfMissing'));
+      throw new IgError('csrf', 'csrfMissing');
     }
 
-    const response = await fetch(url, {
-      method,
-      credentials: 'include',
-      headers: {
-        'x-ig-app-id': IG_APP_ID,
-        'x-requested-with': 'XMLHttpRequest',
-        'accept': 'application/json',
-        ...(method !== 'GET' ? { 'x-csrftoken': csrfToken } : {}),
-        ...(options.headers || {})
-      },
-      body: options.body,
-      signal: options.signal
-    });
+    // Respect an active 429 cooldown without touching the network.
+    if (Date.now() < rateLimitUntil) {
+      throw new IgError('rate_limited', 'apiRateLimited', {}, { status: 429 });
+    }
 
+    let response;
+    try {
+      response = await fetch(url, {
+        method,
+        credentials: 'include',
+        headers: {
+          'x-ig-app-id': IG_APP_ID,
+          'x-requested-with': 'XMLHttpRequest',
+          'accept': 'application/json',
+          ...(method !== 'GET' ? { 'x-csrftoken': csrfToken } : {}),
+          ...(options.headers || {})
+        },
+        body: options.body,
+        signal: options.signal
+      });
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      throw new IgError('network', 'apiNetworkError');
+    }
+
+    const { status } = response;
     if (!response.ok) {
-      throw new Error(getApiErrorMessage(response.status));
+      if (status === 429) {
+        const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'));
+        await startRateLimit(retryAfterMs);
+        throw new IgError('rate_limited', 'apiRateLimited', {}, { status, retryAfterMs });
+      }
+      if (status === 401) throw new IgError('unauthorized', 'apiUnauthorized', {}, { status });
+      if (status === 403) throw new IgError('forbidden', 'apiForbidden', {}, { status });
+      if (status >= 500) throw new IgError('server', 'apiServerError', { status }, { status });
+      throw new IgError('bad_request', 'apiRequestError', { status }, { status });
     }
 
     let data;
     try {
       data = await response.json();
     } catch (_) {
-      throw new Error(tr('apiInvalidResponse'));
+      throw new IgError('invalid_response', 'apiInvalidResponse', {}, { status });
     }
 
     if (data?.status === 'fail') {
-      throw new Error(data.message || tr('apiRequestError', { status: response.status }));
+      throw new IgError('bad_request', 'apiRequestError', { status }, { status });
     }
 
     return data;
@@ -416,7 +479,7 @@
     const userId = formData.user_id || formData.username_id || formData.pk || formData.id;
 
     if (!username) {
-      throw new Error(tr('usernameDetectionError'));
+      throw new IgError('invalid_response', 'usernameDetectionError');
     }
 
     return { username, userId: userId ? String(userId) : null };
@@ -431,21 +494,32 @@
     const userId = data?.data?.user?.id;
 
     if (!userId) {
-      throw new Error(tr('userIdError', { username: cleanUsername }));
+      throw new IgError('invalid_response', 'userIdError', { username: cleanUsername });
     }
 
     return String(userId);
   }
 
+  // ds_user_id is set by Instagram for the logged-in session and is readable by page scripts.
+  function getSessionUserId() {
+    const id = getCookie('ds_user_id');
+    return /^\d+$/.test(id) ? id : null;
+  }
+
+  // Id priority: server-provided (edit form) > ds_user_id cookie > web_profile_info (last resort).
+  // The result is cached per ds_user_id, so switching accounts invalidates it; without
+  // the cookie nothing is cached because an account switch could not be detected.
+  // ponytail: edit form username is trusted to belong to the cookie's session (same cookie jar).
   async function getCurrentUser(signal) {
+    const cookieId = getSessionUserId();
+    if (cookieId && identityCache?.cookieId === cookieId) return identityCache.user;
+
     const user = await getCurrentUserFromEditData(signal);
+    const userId = user.userId || cookieId || await getUserIdByUsername(user.username, signal);
+    const resolved = { ...user, userId };
 
-    if (user.userId) {
-      return user;
-    }
-
-    const userId = await getUserIdByUsername(user.username, signal);
-    return { ...user, userId };
+    identityCache = cookieId ? { cookieId, user: resolved } : null;
+    return resolved;
   }
 
   async function getRelationshipList(userId, type, onProgress, signal) {
@@ -1689,7 +1763,7 @@
           await unfollowUser(user, controller.signal);
           succeeded.push(user.username);
         } catch (error) {
-          if (isAbortError(error)) throw error;
+          if (isAbortError(error) || isFatalApiError(error)) throw error;
           failed.push({ username: user.username, error: error.message || String(error) });
         }
 
@@ -1726,15 +1800,15 @@
       };
 
       if (fatalError) {
-        setError(fatalError.message || String(fatalError));
-        setStatus(tr('analysisError'));
+        setError(describeError(fatalError));
+        setStatus('');
       } else if (canceled) {
         setStatus(tr('unfollowCanceled'));
       } else {
         setStatus(tr('unfollowDone', { success: succeeded.length, failed: failed.length }));
       }
 
-      if (failed.length) setError(tr('unfollowFailed'));
+      if (failed.length && !fatalError) setError(tr('unfollowFailed'));
     } finally {
       if (state.abortController === controller) state.abortController = null;
       state.unfollowCancel = false;
@@ -1744,7 +1818,7 @@
   }
 
   async function runAnalysis() {
-    if (state.isRunning) return;
+    if (state.isRunning || state.unfollowRunning) return;
 
     setRunning(true);
     setError('');
@@ -1800,8 +1874,8 @@
       if (isAbortError(error)) {
         setStatus(tr('canceledByUser'));
       } else {
-        setError(error.message || String(error));
-        setStatus(tr('analysisError'));
+        setError(describeError(error));
+        setStatus('');
       }
     } finally {
       if (state.abortController === controller) state.abortController = null;
@@ -1877,7 +1951,7 @@
     previouslyFocusedElement = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null;
-    await loadLanguagePreference();
+    await Promise.all([loadLanguagePreference(), loadRateLimit()]);
     const root = createPanel();
     applyTranslations();
     root.querySelector('#ifc-start')?.focus();
@@ -1890,4 +1964,14 @@
   });
 
   document.addEventListener('click', closeExportMenuOnOutsideClick);
+
+  // Test seam: only populated when a test harness pre-defines the hook object.
+  if (window.__IFC_TEST_HOOK__) {
+    Object.assign(window.__IFC_TEST_HOOK__, {
+      igFetch, getCurrentUser, getRelationshipList, describeError, isFatalApiError, IgError,
+      setLang: (lang) => { currentLang = lang; },
+      resetState: () => { rateLimitUntil = 0; identityCache = null; },
+      getRateLimitUntil: () => rateLimitUntil
+    });
+  }
 })();
